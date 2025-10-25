@@ -1,6 +1,7 @@
 package com.ptit.b22cn539.int1433.Service.User;
 
 import com.ptit.b22cn539.int1433.DTO.UserLoginRequest;
+import com.ptit.b22cn539.int1433.Models.UserEntity;
 import com.ptit.b22cn539.int1433.Repository.IUserRepository;
 import com.ptit.b22cn539.int1433.Utils.JwtUtils;
 import lombok.AccessLevel;
@@ -27,5 +28,15 @@ public class UserServiceImpl implements  IUserService {
             throw new RuntimeException();
         }
         return this.jwtUtils.generateToken(user.getUsername());
+    }
+
+    @Override
+    @Transactional
+    public UserEntity register(UserEntity userEntity) {
+        if (this.userRepository.findByUsername(userEntity.getUsername()) != null) {
+            throw new RuntimeException();
+        }
+        userEntity.setPassword(this.passwordEncoder.encode(userEntity.getPassword()));
+        return this.userRepository.save(userEntity);
     }
 }
