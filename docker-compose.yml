@@ -1,0 +1,32 @@
+name: int1433
+services:
+  postgres:
+    image: postgres:17.3
+    container_name: int1433_postgres
+    restart: on-failure
+    environment:
+      POSTGRES_DB: int1433
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 123
+      PGDATA: /var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    volumes:
+      - int1433_postgres:/var/lib/postgresql/data
+  minio:
+    container_name: int1433_minio
+    image: quay.io/minio/minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: 123456789
+      MINIO_VOLUMES: /mnt/data
+      MINIO_OPTS: --console-address :9001
+    volumes:
+      - ./storage:/mnt/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server --console-address ":9001"
+volumes:
+  int1433_postgres:
