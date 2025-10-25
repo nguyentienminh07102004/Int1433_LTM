@@ -29,6 +29,7 @@ public class WebSecurityConfiguration {
         http.authorizeHttpRequests(requests -> requests
                 .requestMatchers(HttpMethod.POST, "/users/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/users/register").permitAll()
+                .requestMatchers(HttpMethod.POST, "/musics").permitAll()
                 .anyRequest().authenticated());
         return http.build();
     }
