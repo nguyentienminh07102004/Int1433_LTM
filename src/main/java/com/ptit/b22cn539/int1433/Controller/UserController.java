@@ -1,6 +1,6 @@
 package com.ptit.b22cn539.int1433.Controller;
 
-import com.ptit.b22cn539.int1433.DTO.UserLoginRequest;
+import com.ptit.b22cn539.int1433.DTO.User.UserLoginRequest;
 import com.ptit.b22cn539.int1433.Models.UserEntity;
 import com.ptit.b22cn539.int1433.Service.User.IUserService;
 import lombok.AccessLevel;

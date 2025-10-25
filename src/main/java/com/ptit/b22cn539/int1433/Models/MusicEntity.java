@@ -13,6 +13,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.FieldDefaults;
+import org.hibernate.annotations.Cascade;
+import org.hibernate.annotations.CascadeType;
 
 import java.util.List;
 
@@ -32,6 +34,7 @@ public class MusicEntity {
     String description;
     @Column(unique = true, nullable = false)
     String url;
-    @OneToMany(mappedBy = "music")
+    @OneToMany(mappedBy = "music", orphanRemoval = true)
+    @Cascade(value = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE})
     List<AnswerEntity> answers;
 }

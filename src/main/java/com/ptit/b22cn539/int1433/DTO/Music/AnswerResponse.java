@@ -1,4 +1,4 @@
-package com.ptit.b22cn539.int1433.DTO;
+package com.ptit.b22cn539.int1433.DTO.Music;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -14,7 +14,8 @@ import lombok.experimental.FieldDefaults;
 @AllArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class UserLoginRequest {
-    String username;
-    String password;
+public class AnswerResponse {
+    Long id;
+    String description;
+    boolean isCorrect;
 }
