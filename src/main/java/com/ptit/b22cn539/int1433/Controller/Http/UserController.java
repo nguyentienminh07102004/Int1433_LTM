@@ -1,4 +1,4 @@
-package com.ptit.b22cn539.int1433.Controller;
+package com.ptit.b22cn539.int1433.Controller.Http;
 
 import com.ptit.b22cn539.int1433.DTO.User.UserLoginRequest;
 import com.ptit.b22cn539.int1433.Models.UserEntity;

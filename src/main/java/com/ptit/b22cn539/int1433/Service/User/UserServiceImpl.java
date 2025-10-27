@@ -11,6 +11,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
@@ -38,5 +40,11 @@ public class UserServiceImpl implements  IUserService {
         }
         userEntity.setPassword(this.passwordEncoder.encode(userEntity.getPassword()));
         return this.userRepository.save(userEntity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserEntity> getAllUsers() {
+        return this.userRepository.findAll();
     }
 }
