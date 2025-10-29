@@ -6,8 +6,9 @@ import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
 import com.corundumstudio.socketio.annotation.OnConnect;
 import com.corundumstudio.socketio.annotation.OnDisconnect;
-import com.ptit.b22cn539.int1433.Controller.SocketIO.UserSocketIOController;
-import com.ptit.b22cn539.int1433.Models.UserEntity;
+import com.ptit.b22cn539.int1433.DTO.User.UserResponse;
+import com.ptit.b22cn539.int1433.Models.SessionUserEntity;
+import com.ptit.b22cn539.int1433.Repository.ISessionUserRepository;
 import com.ptit.b22cn539.int1433.Service.User.IUserService;
 import com.ptit.b22cn539.int1433.Utils.JwtUtils;
 import io.jsonwebtoken.Claims;
@@ -22,6 +23,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Configuration
@@ -32,10 +34,10 @@ public class SocketIOConfiguration {
     String host;
     @Value("${socket-server.port}")
     Integer port;
-    final UserSocketIOController userSocketIOController;
     final IUserService userService;
     final JwtUtils jwtUtils;
     SocketIOServer server;
+    final ISessionUserRepository sessionUserRepository;
 
     // cho vào header và auth đều không dùng được bị lỗi CORS -> chưa hiểu tại sao
     // lý do GPT đưa ra là do khi thực hiện CORS thì header và auth không được gửi đi
@@ -52,7 +54,6 @@ public class SocketIOConfiguration {
         config.setAuthorizationListener(this.handleAuthorization());
         this.server = new SocketIOServer(config);
         this.server.addListeners(this);
-        this.server.addListeners(this.userSocketIOController);
         this.server.start();
         return this.server;
     }
@@ -60,13 +61,28 @@ public class SocketIOConfiguration {
     @OnConnect
     public void onConnect(SocketIOClient socketIOClient) {
         log.info("Connected: {}", socketIOClient.getSessionId());
-        List<UserEntity> users = this.userService.getAllUsers();
+        AuthorizationResult authorizationResult = this.server.getConfiguration().getAuthorizationListener().getAuthorizationResult(socketIOClient.getHandshakeData());
+        Map<String, Object> data = authorizationResult.getStoreParams();
+        log.info("Authorization result: {}", data);
+        String username = data.get("sub").toString();
+        SessionUserEntity sessionUser = SessionUserEntity.builder()
+                .sessionId(socketIOClient.getSessionId().toString())
+                .username(username)
+                .build();
+        this.sessionUserRepository.save(sessionUser);
+        List<UserResponse> users = this.userService.getAllUsers(username);
         socketIOClient.sendEvent("topic/getAllUsersResponse", users);
+        this.server.getBroadcastOperations().sendEvent("topic/changeStatus", socketIOClient, Map.of("username", username, "status", UserStatus.ONLINE));
     }
 
     @OnDisconnect
     public void onDisconnect(SocketIOClient socketIOClient) {
         log.info("Disconnected: {}", socketIOClient.getSessionId());
+        SessionUserEntity sessionUser = this.sessionUserRepository.findBySessionId(socketIOClient.getSessionId().toString());
+        if (sessionUser != null) {
+            this.sessionUserRepository.delete(sessionUser);
+            this.server.getBroadcastOperations().sendEvent("topic/changeStatus", socketIOClient, Map.of("username", sessionUser.getUsername(), "status", UserStatus.OFFLINE));
+        }
     }
 
     public AuthorizationListener handleAuthorization() {
