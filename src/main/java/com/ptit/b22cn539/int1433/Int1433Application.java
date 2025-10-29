@@ -2,8 +2,10 @@ package com.ptit.b22cn539.int1433;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 
 @SpringBootApplication
+@EnableJpaAuditing
 public class Int1433Application {
 
 	public static void main(String[] args) {
