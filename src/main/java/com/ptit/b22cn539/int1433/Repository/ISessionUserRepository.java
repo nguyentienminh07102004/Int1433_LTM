@@ -4,10 +4,8 @@ import com.ptit.b22cn539.int1433.Models.SessionUserEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
-
 @Repository
 public interface ISessionUserRepository extends JpaRepository<SessionUserEntity, Long> {
     SessionUserEntity findBySessionId(String sessionId);
-    List<SessionUserEntity> findByUsername(String username);
+    SessionUserEntity findByUsername(String username);
 }

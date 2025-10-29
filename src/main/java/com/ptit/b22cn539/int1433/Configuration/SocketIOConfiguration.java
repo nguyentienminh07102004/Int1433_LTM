@@ -6,6 +6,7 @@ import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
 import com.corundumstudio.socketio.annotation.OnConnect;
 import com.corundumstudio.socketio.annotation.OnDisconnect;
+import com.corundumstudio.socketio.annotation.OnEvent;
 import com.ptit.b22cn539.int1433.DTO.User.UserResponse;
 import com.ptit.b22cn539.int1433.Models.SessionUserEntity;
 import com.ptit.b22cn539.int1433.Repository.ISessionUserRepository;
@@ -20,10 +21,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.web.ProjectedPayload;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @Configuration
@@ -85,6 +88,19 @@ public class SocketIOConfiguration {
         }
     }
 
+    @OnEvent(value = "topic/inviteUser")
+    public void inviteUser(SocketIOClient fromClient, @ProjectedPayload String toUsername) {
+        SessionUserEntity toSessionUser = this.sessionUserRepository.findByUsername(toUsername);
+        if (toSessionUser != null) {
+            SocketIOClient toClient = this.server.getClient(UUID.fromString(toSessionUser.getSessionId()));
+            String fromUserId = fromClient.getSessionId().toString();
+            SessionUserEntity fromSessionUser = this.sessionUserRepository.findBySessionId(fromUserId);
+            if (toClient != null && fromSessionUser != null) {
+                toClient.sendEvent("topic/inviteUser", Map.of("from", fromSessionUser.getUsername()));
+            }
+        }
+    }
+
     public AuthorizationListener handleAuthorization() {
         return handshakeData -> {
             String token = handshakeData.getSingleUrlParam("token");
@@ -99,6 +115,7 @@ public class SocketIOConfiguration {
     public void stopServer() {
         if (this.server != null) {
             this.server.stop();
+            this.sessionUserRepository.deleteAll();
         }
     }
 }
