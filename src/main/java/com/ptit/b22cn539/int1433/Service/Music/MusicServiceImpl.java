@@ -1,8 +1,8 @@
 package com.ptit.b22cn539.int1433.Service.Music;
 
-import com.ptit.b22cn539.int1433.DTO.Music.AnswerResponse;
 import com.ptit.b22cn539.int1433.DTO.Music.MusicCreateRequest;
 import com.ptit.b22cn539.int1433.DTO.Music.MusicResponse;
+import com.ptit.b22cn539.int1433.Mapper.MusicMapper;
 import com.ptit.b22cn539.int1433.Models.AnswerEntity;
 import com.ptit.b22cn539.int1433.Models.MusicEntity;
 import com.ptit.b22cn539.int1433.Repository.IMusicRepository;
@@ -31,6 +31,7 @@ public class MusicServiceImpl implements IMusicService {
     @Value(value = "${minio.host}")
     @NonFinal
     String host;
+    MusicMapper musicMapper;
 
 
     @Override
@@ -63,20 +64,7 @@ public class MusicServiceImpl implements IMusicService {
             }
             music.setAnswers(answers);
             this.musicRepository.save(music);
-            List<AnswerResponse> answerResponses = music.getAnswers().stream()
-                    .map(answerEntity -> AnswerResponse.builder()
-                            .id(answerEntity.getId())
-                            .description(answerEntity.getDescription())
-                            .isCorrect(answerEntity.isCorrect())
-                            .build())
-                    .toList();
-            return MusicResponse.builder()
-                    .id(music.getId())
-                    .title(music.getTitle())
-                    .description(music.getDescription())
-                    .url(music.getUrl())
-                    .answers(answerResponses)
-                    .build();
+            return this.musicMapper.toMusicResponse(music);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

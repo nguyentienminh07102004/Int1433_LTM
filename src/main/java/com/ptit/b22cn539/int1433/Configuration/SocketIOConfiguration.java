@@ -7,8 +7,17 @@ import com.corundumstudio.socketio.SocketIOServer;
 import com.corundumstudio.socketio.annotation.OnConnect;
 import com.corundumstudio.socketio.annotation.OnDisconnect;
 import com.corundumstudio.socketio.annotation.OnEvent;
+import com.ptit.b22cn539.int1433.DTO.Music.MusicResponse;
 import com.ptit.b22cn539.int1433.DTO.User.UserResponse;
+import com.ptit.b22cn539.int1433.Mapper.MusicMapper;
+import com.ptit.b22cn539.int1433.Models.AnswerEntity;
+import com.ptit.b22cn539.int1433.Models.GameEntity;
+import com.ptit.b22cn539.int1433.Models.GameItemEntity;
+import com.ptit.b22cn539.int1433.Models.MusicEntity;
 import com.ptit.b22cn539.int1433.Models.SessionUserEntity;
+import com.ptit.b22cn539.int1433.Repository.IGameItemRepository;
+import com.ptit.b22cn539.int1433.Repository.IGameRepository;
+import com.ptit.b22cn539.int1433.Repository.IMusicRepository;
 import com.ptit.b22cn539.int1433.Repository.ISessionUserRepository;
 import com.ptit.b22cn539.int1433.Service.User.IUserService;
 import com.ptit.b22cn539.int1433.Utils.JwtUtils;
@@ -24,6 +33,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.web.ProjectedPayload;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -41,6 +51,10 @@ public class SocketIOConfiguration {
     final JwtUtils jwtUtils;
     SocketIOServer server;
     final ISessionUserRepository sessionUserRepository;
+    final IMusicRepository musicRepository;
+    final MusicMapper musicMapper;
+    final IGameRepository gameRepository;
+    final IGameItemRepository gameItemRepository;
 
     // cho vào header và auth đều không dùng được bị lỗi CORS -> chưa hiểu tại sao
     // lý do GPT đưa ra là do khi thực hiện CORS thì header và auth không được gửi đi
@@ -68,6 +82,7 @@ public class SocketIOConfiguration {
         Map<String, Object> data = authorizationResult.getStoreParams();
         log.info("Authorization result: {}", data);
         String username = data.get("sub").toString();
+        this.sessionUserRepository.deleteByUsername(username);
         SessionUserEntity sessionUser = SessionUserEntity.builder()
                 .sessionId(socketIOClient.getSessionId().toString())
                 .username(username)
@@ -98,6 +113,71 @@ public class SocketIOConfiguration {
             if (toClient != null && fromSessionUser != null) {
                 toClient.sendEvent("topic/inviteUser", Map.of("from", fromSessionUser.getUsername()));
             }
+        }
+    }
+
+    @OnEvent(value = "topic/acceptInvite")
+    public void acceptInvite(SocketIOClient fromClient, @ProjectedPayload String toUsername) {
+        SessionUserEntity toSessionUser = this.sessionUserRepository.findByUsername(toUsername);
+        if (toSessionUser != null) {
+            SocketIOClient toClient = this.server.getClient(UUID.fromString(toSessionUser.getSessionId()));
+            String fromUserSessionId = fromClient.getSessionId().toString();
+            SessionUserEntity fromSessionUser = this.sessionUserRepository.findBySessionId(fromUserSessionId);
+            if (toClient != null && fromSessionUser != null) {
+                toClient.sendEvent("topic/acceptInvite", Map.of("from", fromSessionUser.getUsername()));
+
+                // init game with 10 random musics
+                List<MusicEntity> musics = this.musicRepository.findRandom10Music();
+                List<MusicResponse> musicResponses = musics.stream().map(this.musicMapper::toMusicResponse).toList();
+                log.info("Init game with musics: {}", musicResponses);
+                GameEntity game = new GameEntity();
+                List<GameItemEntity> gameItems = new ArrayList<>();
+                for (MusicEntity music : musics) {
+                    GameItemEntity item = new GameItemEntity();
+                    item.setGame(game);
+                    item.setMusic(music);
+                    item.setUsername1(fromSessionUser.getUsername());
+                    item.setUsername2(toSessionUser.getUsername());
+                    Long answerCorrectId = music.getAnswers().stream().filter(AnswerEntity::isCorrect).findFirst().get().getId();
+                    item.setAnswerCorrectId(answerCorrectId);
+                    gameItems.add(item);
+                }
+                game.setGameItems(gameItems);
+                this.gameRepository.save(game);
+                List<Long> gameItemIds = gameItems.stream().map(GameItemEntity::getMusic).map(MusicEntity::getId).toList();
+                toClient.sendEvent("topic/initGame", Map.of("gameId", gameItemIds));
+                fromClient.sendEvent("topic/initGame", Map.of("gameId", gameItemIds));
+            }
+        }
+    }
+
+    @OnEvent(value = "topic/changeQuestion")
+    public void handleChangeQuestion(@ProjectedPayload Map<String, String> data, SocketIOClient fromClient) {
+        Long musicId = Long.valueOf(data.get("musicId"));
+        MusicEntity music = this.musicRepository.findById(musicId).orElseThrow();
+        MusicResponse musicResponse = this.musicMapper.toMusicResponse(music);
+        fromClient.sendEvent("topic/changeQuestion", musicResponse);
+    }
+
+    @OnEvent(value = "topic/handleAnswer")
+    public void handleAnswer(SocketIOClient fromClient, @ProjectedPayload Map<String, Long> payload) {
+        Long gameItemId = payload.get("gameItemId");
+        Long answerId = payload.get("answerId");
+        String fromUserSessionId = fromClient.getSessionId().toString();
+        SessionUserEntity fromSessionUser = this.sessionUserRepository.findBySessionId(fromUserSessionId);
+        if (fromSessionUser != null) {
+            GameItemEntity gameItem = this.gameItemRepository.findById(gameItemId).orElseThrow();
+            if (fromSessionUser.getUsername().equals(gameItem.getUsername1())) {
+                gameItem.setAnswerUser1ChooseId(answerId);
+            } else if (fromSessionUser.getUsername().equals(gameItem.getUsername2())) {
+                gameItem.setAnswerUser2ChooseId(answerId);
+            }
+            int score = 0;
+            if (answerId.equals(gameItem.getAnswerCorrectId())) {
+                score = 1;
+            }
+            this.gameItemRepository.save(gameItem);
+            fromClient.sendEvent("topic/answerResult", Map.of("score", score));
         }
     }
 

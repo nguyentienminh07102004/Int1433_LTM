@@ -17,5 +17,4 @@ import lombok.experimental.FieldDefaults;
 public class AnswerResponse {
     Long id;
     String description;
-    boolean isCorrect;
 }
