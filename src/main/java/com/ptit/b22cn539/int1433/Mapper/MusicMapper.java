@@ -21,7 +21,7 @@ public class MusicMapper {
                 .id(music.getId())
                 .title(music.getTitle())
                 .description(music.getDescription())
-                .url(music.getUrl())
+                .url(music.getUrl().replaceAll("localhost", "10.109.180.251"))
                 .answers(answerResponses)
                 .build();
     }

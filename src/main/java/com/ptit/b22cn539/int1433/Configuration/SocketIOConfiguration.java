@@ -15,14 +15,19 @@ import com.ptit.b22cn539.int1433.Models.GameEntity;
 import com.ptit.b22cn539.int1433.Models.GameItemEntity;
 import com.ptit.b22cn539.int1433.Models.MusicEntity;
 import com.ptit.b22cn539.int1433.Models.SessionUserEntity;
+import com.ptit.b22cn539.int1433.Models.UserEntity;
 import com.ptit.b22cn539.int1433.Repository.IGameItemRepository;
 import com.ptit.b22cn539.int1433.Repository.IGameRepository;
 import com.ptit.b22cn539.int1433.Repository.IMusicRepository;
 import com.ptit.b22cn539.int1433.Repository.ISessionUserRepository;
+import com.ptit.b22cn539.int1433.Repository.IUserRepository;
 import com.ptit.b22cn539.int1433.Service.User.IUserService;
 import com.ptit.b22cn539.int1433.Utils.JwtUtils;
 import io.jsonwebtoken.Claims;
 import jakarta.annotation.PreDestroy;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -32,11 +37,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.web.ProjectedPayload;
 import org.springframework.util.StringUtils;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 @Slf4j
 @Configuration
@@ -55,6 +55,7 @@ public class SocketIOConfiguration {
     final MusicMapper musicMapper;
     final IGameRepository gameRepository;
     final IGameItemRepository gameItemRepository;
+    final IUserRepository userRepository;
 
     // cho vào header và auth đều không dùng được bị lỗi CORS -> chưa hiểu tại sao
     // lý do GPT đưa ra là do khi thực hiện CORS thì header và auth không được gửi đi
@@ -87,10 +88,21 @@ public class SocketIOConfiguration {
                 .sessionId(socketIOClient.getSessionId().toString())
                 .username(username)
                 .build();
+        UserEntity userEntity = this.userRepository.findByUsername(username);
         this.sessionUserRepository.save(sessionUser);
+        this.server.getBroadcastOperations().sendEvent("topic/changeStatus", socketIOClient, Map.of("id", userEntity.getId(), "fullName", userEntity.getFullName(),"username", username, "status", UserStatus.ONLINE));
+    }
+
+    @OnEvent("topic/getAllUsersResponse")
+    public void getAllUsers(SocketIOClient socketIOClient) {
+        SessionUserEntity sessionUser = this.sessionUserRepository.findBySessionId(socketIOClient.getSessionId().toString());
+        if (sessionUser == null) {
+            socketIOClient.sendEvent("error", "Session not ready yet");
+            return;
+        }
+        String username = sessionUser.getUsername();
         List<UserResponse> users = this.userService.getAllUsers(username);
         socketIOClient.sendEvent("topic/getAllUsersResponse", users);
-        this.server.getBroadcastOperations().sendEvent("topic/changeStatus", socketIOClient, Map.of("username", username, "status", UserStatus.ONLINE));
     }
 
     @OnDisconnect
@@ -98,8 +110,12 @@ public class SocketIOConfiguration {
         log.info("Disconnected: {}", socketIOClient.getSessionId());
         SessionUserEntity sessionUser = this.sessionUserRepository.findBySessionId(socketIOClient.getSessionId().toString());
         if (sessionUser != null) {
+            AuthorizationResult authorizationResult = this.server.getConfiguration().getAuthorizationListener().getAuthorizationResult(socketIOClient.getHandshakeData());
+            Map<String, Object> data = authorizationResult.getStoreParams();
+            String username = data.get("sub").toString();
+            UserEntity userEntity = this.userRepository.findByUsername(username);
             this.sessionUserRepository.delete(sessionUser);
-            this.server.getBroadcastOperations().sendEvent("topic/changeStatus", socketIOClient, Map.of("username", sessionUser.getUsername(), "status", UserStatus.OFFLINE));
+            this.server.getBroadcastOperations().sendEvent("topic/changeStatus", socketIOClient, Map.of("id", userEntity.getId(), "fullName", userEntity.getFullName(),"username", username, "status", UserStatus.OFFLINE));
         }
     }
 
@@ -125,28 +141,20 @@ public class SocketIOConfiguration {
             SessionUserEntity fromSessionUser = this.sessionUserRepository.findBySessionId(fromUserSessionId);
             if (toClient != null && fromSessionUser != null) {
                 toClient.sendEvent("topic/acceptInvite", Map.of("from", fromSessionUser.getUsername()));
-
-                // init game with 10 random musics
                 List<MusicEntity> musics = this.musicRepository.findRandom10Music();
                 List<MusicResponse> musicResponses = musics.stream().map(this.musicMapper::toMusicResponse).toList();
                 log.info("Init game with musics: {}", musicResponses);
-                GameEntity game = new GameEntity();
-                List<GameItemEntity> gameItems = new ArrayList<>();
-                for (MusicEntity music : musics) {
-                    GameItemEntity item = new GameItemEntity();
-                    item.setGame(game);
-                    item.setMusic(music);
-                    item.setUsername1(fromSessionUser.getUsername());
-                    item.setUsername2(toSessionUser.getUsername());
-                    Long answerCorrectId = music.getAnswers().stream().filter(AnswerEntity::isCorrect).findFirst().get().getId();
-                    item.setAnswerCorrectId(answerCorrectId);
-                    gameItems.add(item);
-                }
-                game.setGameItems(gameItems);
-                this.gameRepository.save(game);
-                List<Long> gameItemIds = gameItems.stream().map(GameItemEntity::getMusic).map(MusicEntity::getId).toList();
-                toClient.sendEvent("topic/initGame", Map.of("gameId", gameItemIds));
-                fromClient.sendEvent("topic/initGame", Map.of("gameId", gameItemIds));
+                GameEntity game1 = new GameEntity();
+                GameEntity game2 = new GameEntity();
+                String matchCode = UUID.randomUUID().toString();
+                game1.setMatchCode(matchCode);
+                game2.setMatchCode(matchCode);
+                game1.setUsername(fromSessionUser.getUsername());
+                game2.setUsername(toSessionUser.getUsername());
+                this.gameRepository.saveAll(List.of(game1, game2));
+                List<Long> musicIds = musics.stream().map(MusicEntity::getId).toList();
+                toClient.sendEvent("topic/initGame", Map.of("musicIds", musicIds, "gameId", game2.getId(), "matchCode", matchCode));
+                fromClient.sendEvent("topic/initGame", Map.of("musicIds", musicIds, "gameId", game1.getId(), "matchCode", matchCode));
             }
         }
     }
@@ -160,24 +168,65 @@ public class SocketIOConfiguration {
     }
 
     @OnEvent(value = "topic/handleAnswer")
-    public void handleAnswer(SocketIOClient fromClient, @ProjectedPayload Map<String, Long> payload) {
-        Long gameItemId = payload.get("gameItemId");
-        Long answerId = payload.get("answerId");
+    public void handleAnswer(SocketIOClient fromClient, @ProjectedPayload Map<String, String> payload) {
+        String answer = payload.get("answerId");
+        Long musicId = Long.valueOf(payload.get("musicId"));
+        Long gameId = Long.valueOf(payload.get("gameId"));
+        GameItemEntity gameItem = new GameItemEntity();
+        GameEntity gameEntity = this.gameRepository.findById(gameId).orElseThrow();
+        gameItem.setGame(gameEntity);
+        MusicEntity musicEntity = this.musicRepository.findById(musicId).orElseThrow();
+        gameItem.setMusic(musicEntity);
+        if (!StringUtils.hasText(answer)) {
+            gameItem.setAnswerId(null);
+            this.gameItemRepository.save(gameItem);
+            fromClient.sendEvent("topic/answerResult", Map.of("score", 0));
+            return;
+        }
+        Long answerId = Long.valueOf(answer);
+        List<AnswerEntity> answers = musicEntity.getAnswers();
+        Long correctAnswerId = answers.stream().filter(AnswerEntity::isCorrect).findFirst().orElseThrow().getId();
+        gameItem.setAnswerId(answerId);
+        int score = 0;
+        if (answerId.equals(correctAnswerId)) {
+            score += 1;
+        }
+        this.gameItemRepository.save(gameItem);
+        fromClient.sendEvent("topic/answerResult", Map.of("score", score));
+    }
+
+    @OnEvent(value = "topic/finishGame")
+    public void finishGame(@ProjectedPayload Map<String, String> data, SocketIOClient fromClient) {
         String fromUserSessionId = fromClient.getSessionId().toString();
         SessionUserEntity fromSessionUser = this.sessionUserRepository.findBySessionId(fromUserSessionId);
         if (fromSessionUser != null) {
-            GameItemEntity gameItem = this.gameItemRepository.findById(gameItemId).orElseThrow();
-            if (fromSessionUser.getUsername().equals(gameItem.getUsername1())) {
-                gameItem.setAnswerUser1ChooseId(answerId);
-            } else if (fromSessionUser.getUsername().equals(gameItem.getUsername2())) {
-                gameItem.setAnswerUser2ChooseId(answerId);
-            }
-            int score = 0;
-            if (answerId.equals(gameItem.getAnswerCorrectId())) {
-                score = 1;
-            }
-            this.gameItemRepository.save(gameItem);
-            fromClient.sendEvent("topic/answerResult", Map.of("score", score));
+            Long gameId = Long.valueOf(data.get("gameId"));
+            GameEntity game = this.gameRepository.findById(gameId).orElseThrow();
+            int totalScore = Integer.parseInt(data.get("score"));
+            game.setScoreUser(totalScore);
+            this.gameRepository.save(game);
+            fromClient.sendEvent("topic/finishGame", Map.of("totalScore", totalScore));
+        }
+    }
+
+    @OnEvent("topic/getResult")
+    public void getResult(@ProjectedPayload Map<String, String> data, SocketIOClient fromClient) {
+        String matchCode = data.get("matchCode");
+        List<GameEntity> gameEntities = this.gameRepository.findByMatchCode(matchCode);
+        GameEntity game = gameEntities.stream()
+                .filter(g -> g.getUsername().equals(this.sessionUserRepository.findBySessionId(fromClient.getSessionId().toString()).getUsername()))
+                .findFirst()
+                .orElseThrow();
+        GameEntity opponentGame = gameEntities.stream()
+                .filter(g -> !g.getId().equals(game.getId()))
+                .findFirst()
+                .orElseThrow();
+        if (opponentGame.getScoreUser() > game.getScoreUser()) {
+            fromClient.sendEvent("topic/getResult", Map.of("result", "LOSE", "yourScore", game.getScoreUser(), "opponentScore", opponentGame.getScoreUser()));
+        } else if (opponentGame.getScoreUser() < game.getScoreUser()) {
+            fromClient.sendEvent("topic/getResult", Map.of("result", "WIN", "yourScore", game.getScoreUser(), "opponentScore", opponentGame.getScoreUser()));
+        } else {
+            fromClient.sendEvent("topic/getResult", Map.of("result", "DRAW", "yourScore", game.getScoreUser(), "opponentScore", opponentGame.getScoreUser()));
         }
     }
 
@@ -189,6 +238,12 @@ public class SocketIOConfiguration {
             Claims claims = this.jwtUtils.extractClaims(token);
             return new AuthorizationResult(true, claims);
         };
+    }
+
+    @OnEvent("topic/getTopRanking")
+    public void getTopRanking(SocketIOClient fromClient) {
+        List<Object[]> result = gameRepository.topRankingRaw();
+        fromClient.sendEvent("topic/getTopRanking", result);
     }
 
     @PreDestroy

@@ -25,11 +25,8 @@ public class GameItemEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     Long id;
-    String username1;
-    String username2;
-    Long answerCorrectId;
-    Long answerUser1ChooseId;
-    Long answerUser2ChooseId;
+    Long answerId;
+
     @ManyToOne
     @JoinColumn(name = "musicId")
     MusicEntity music;
