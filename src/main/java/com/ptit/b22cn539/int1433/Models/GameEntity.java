@@ -1,11 +1,13 @@
 package com.ptit.b22cn539.int1433.Models;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import java.time.Instant;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -15,8 +17,8 @@ import lombok.Setter;
 import lombok.experimental.FieldDefaults;
 import org.hibernate.annotations.Cascade;
 import org.hibernate.annotations.CascadeType;
-
-import java.util.List;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 @Entity
 @Getter
@@ -25,16 +27,17 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class MusicEntity {
+@EntityListeners(AuditingEntityListener.class)
+public class GameEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     Long id;
-    @Column(unique = true, nullable = false)
-    String title;
-    String description;
-    @Column(unique = true, nullable = false)
-    String url;
-    @OneToMany(mappedBy = "music", orphanRemoval = true)
+    @OneToMany(mappedBy = "game", orphanRemoval = true)
     @Cascade(value = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE})
-    List<AnswerEntity> answers;
+    List<GameItemEntity> gameItems;
+    String username;
+    String matchCode;
+    Integer scoreUser;
+    @CreatedDate
+    Instant createdDate;
 }

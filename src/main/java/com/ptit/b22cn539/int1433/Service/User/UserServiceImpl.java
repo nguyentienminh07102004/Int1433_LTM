@@ -1,7 +1,11 @@
 package com.ptit.b22cn539.int1433.Service.User;
 
-import com.ptit.b22cn539.int1433.DTO.UserLoginRequest;
+import com.ptit.b22cn539.int1433.Configuration.UserStatus;
+import com.ptit.b22cn539.int1433.DTO.User.UserLoginRequest;
+import com.ptit.b22cn539.int1433.DTO.User.UserResponse;
+import com.ptit.b22cn539.int1433.Models.SessionUserEntity;
 import com.ptit.b22cn539.int1433.Models.UserEntity;
+import com.ptit.b22cn539.int1433.Repository.ISessionUserRepository;
 import com.ptit.b22cn539.int1433.Repository.IUserRepository;
 import com.ptit.b22cn539.int1433.Utils.JwtUtils;
 import lombok.AccessLevel;
@@ -11,6 +15,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
@@ -18,6 +24,7 @@ public class UserServiceImpl implements  IUserService {
     IUserRepository userRepository;
     PasswordEncoder passwordEncoder;
     JwtUtils jwtUtils;
+    ISessionUserRepository sessionUserRepository;
 
 
     @Override
@@ -38,5 +45,22 @@ public class UserServiceImpl implements  IUserService {
         }
         userEntity.setPassword(this.passwordEncoder.encode(userEntity.getPassword()));
         return this.userRepository.save(userEntity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserResponse> getAllUsers(String username) {
+        return this.userRepository.findByUsernameNot(username).stream()
+                .map(user -> {
+                    SessionUserEntity sessionUser = this.sessionUserRepository.findByUsername(user.getUsername());
+                    UserResponse userResponse = UserResponse.builder()
+                            .id(user.getId())
+                            .username(user.getUsername())
+                            .fullName(user.getFullName())
+                            .build();
+                    if (sessionUser != null) userResponse.setStatus(UserStatus.ONLINE);
+                    else userResponse.setStatus(UserStatus.OFFLINE);
+                    return userResponse;
+                }).toList();
     }
 }

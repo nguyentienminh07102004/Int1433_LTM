@@ -1,4 +1,4 @@
-package com.ptit.b22cn539.int1433.DTO;
+package com.ptit.b22cn539.int1433.DTO.User;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;

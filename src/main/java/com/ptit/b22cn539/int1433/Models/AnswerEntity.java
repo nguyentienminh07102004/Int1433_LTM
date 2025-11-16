@@ -26,7 +26,7 @@ public class AnswerEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     Long id;
     String description;
-
+    boolean isCorrect;
     @ManyToOne
     @JoinColumn(name = "musicId")
     MusicEntity music;

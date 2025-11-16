@@ -1,11 +1,11 @@
 package com.ptit.b22cn539.int1433.Models;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,10 +13,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.FieldDefaults;
-import org.hibernate.annotations.Cascade;
-import org.hibernate.annotations.CascadeType;
-
-import java.util.List;
 
 @Entity
 @Getter
@@ -25,16 +21,16 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class MusicEntity {
+public class GameItemEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     Long id;
-    @Column(unique = true, nullable = false)
-    String title;
-    String description;
-    @Column(unique = true, nullable = false)
-    String url;
-    @OneToMany(mappedBy = "music", orphanRemoval = true)
-    @Cascade(value = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE})
-    List<AnswerEntity> answers;
+    Long answerId;
+
+    @ManyToOne
+    @JoinColumn(name = "musicId")
+    MusicEntity music;
+    @ManyToOne
+    @JoinColumn(name = "gameId")
+    GameEntity game;
 }

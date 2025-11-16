@@ -12,7 +12,9 @@ import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import org.springframework.data.util.Pair;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -20,6 +22,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -28,15 +31,18 @@ public class AppFilterSecurity extends OncePerRequestFilter {
     IUserRepository userRepository;
     JwtUtils jwtUtils;
 
-    String[] WHITE_LIST = {
-            "/users/login",
-            "/users/register"
-    };
+    List<Pair<String, HttpMethod>> WHITE_LIST = List.of(
+            Pair.of("/users/login", HttpMethod.POST),
+            Pair.of("/users/register", HttpMethod.POST),
+            Pair.of("/musics", HttpMethod.POST)
+    );
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain) throws ServletException, IOException {
-        for (String path : WHITE_LIST) {
-            if (request.getServletPath().matches(path)) {
+        for (Pair<String, HttpMethod> entry : WHITE_LIST) {
+            String path = entry.getFirst();
+            HttpMethod method = entry.getSecond();
+            if (request.getServletPath().matches(path) && request.getMethod().equalsIgnoreCase(method.name())) {
                 filterChain.doFilter(request, response);
                 return;
             }
